@@ -1,0 +1,4 @@
+tqdm
+numpy
+pandas
+torch>=1.7.0

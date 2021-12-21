@@ -1,0 +1,17 @@
+name: deeppplats
+channels:
+  - defaults
+  - conda-forge
+  - pytorch
+dependencies:
+  - python=3.8
+  - tqdm
+  - pylint
+  - black
+  - ipykernel
+  - jupyter
+  - numpy
+  - pandas
+  - matplotlib
+  - pytorch>=1.7.0
+  - cudatoolkit=11.0

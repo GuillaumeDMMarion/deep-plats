@@ -1,0 +1,10 @@
+python=3.8
+tqdm
+pylint
+black
+ipykernel
+jupyter
+numpy
+pandas
+matplotlib
+torch>=1.7.0
