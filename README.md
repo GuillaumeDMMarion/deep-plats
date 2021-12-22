@@ -5,6 +5,8 @@ The deep-plats library provides functionalities for analyzing timeseries in a pi
 Requirements
 ==================
 - torch
+- pandas
+- numpy
 - tqdm
 
 &nbsp;
@@ -28,14 +30,22 @@ Minimal example
 In-sample forecast.
 
 ```python
+import matplotlib.pyplot as plt
 from deepplats import DeepPLF
 from deepplats.utils import get_data
 
-X, y = get_data('example1')
+df = get_data('example1')
+y = df.value.to_numpy[-500:]
+X = np.arange(y.size)
 deepplf = DeepPLF(lags=10, horizon=1, breaks=10)
-deepplf.fit(x, y, epochs=1000)
-deepplf.predict(x, y) # predicts on x and lagged rolling y sequences.
+deepplf.fit(X, y, epochs=5000)
+# predict on x and lagged rolling y sequences.
+pred = deepplf.predict(X, y).detach().numpy()
+trend = deepplf.predict(X, y, mod='trend').detach().numpy()
+plt.plot(X[-pred.size:], pred, c='C1')
+plt.plot(X[-pred.size:], trend, c='C1', linestyle=':')
 ```
+<img src="images/example.jpg" width="512"/>
 
 &nbsp;
 

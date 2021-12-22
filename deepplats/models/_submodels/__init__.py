@@ -5,4 +5,5 @@ from ._piecewiselinear import PiecewiseLinearRegression, PiecewiseLinearForecast
 
 ARF = AutoregressiveForecasting
 DenseARF = DenseAutoregressiveForecasting
+PLR = PiecewiseLinearRegression
 PLF = PiecewiseLinearForecasting
