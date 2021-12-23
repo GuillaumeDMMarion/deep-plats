@@ -15,23 +15,30 @@ class PiecewiseLinearRegression(torch.nn.Module):
     credits to: https://stackoverflow.com/users/6922739/matt-motoki
     """
 
-    def __init__(self, breaks: Union[float, int, Sequence]):
+    name = "PiecewiseLinearRegression"
+
+    def __init__(self, breaks: Union[float, int, Sequence] = 0.2):
         super().__init__()
-        self.breaks = self._get_default_breaks(breaks)
-        self.piecewise = torch.nn.Linear(self.breaks.size(1) + 1, 1)
+        self.breaks = breaks
+        self.piecewise = None
+        if not isinstance(self.breaks, (float, int)):
+            self.breaks = torch.nn.Parameter(torch.tensor([breaks], dtype=torch.float))
+            self.piecewise = torch.nn.Linear(self.breaks.size(1) + 1, 1)
 
     @staticmethod
-    def _get_default_breaks(breaks: Union[float, int, Sequence]) -> torch.Tensor:
-        if isinstance(breaks, int):
-            return torch.zeros((1, breaks))
-        return torch.nn.Parameter(torch.tensor([breaks], dtype=torch.float))
+    def _get_default_breaks(
+        X: torch.Tensor, breaks: Union[float, int]
+    ) -> torch.nn.Paramter:
+        n_breaks = breaks if isinstance(breaks, int) else int(X.size(0) * breaks)
+        return torch.nn.Parameter(
+            torch.linspace(X.min(), X.max(), n_breaks, dtype=torch.float)[None, :]
+        )
 
     def forward(self, X: torch.Tensor) -> torch.Tensor:
         """Torch.nn forward."""
         if not isinstance(self.breaks, torch.nn.Parameter):
-            self.breaks = torch.nn.Parameter(
-                torch.linspace(X.min(), X.max(), self.breaks.size(1), out=self.breaks)
-            )
+            self.breaks = self._get_default_breaks(X, self.breaks)
+            self.piecewise = torch.nn.Linear(self.breaks.size(1) + 1, 1)
         piecewise = self.piecewise(
             torch.cat([X, torch.nn.ReLU()(X - self.breaks)], 2)
         )  # , 1))

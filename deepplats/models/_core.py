@@ -1,7 +1,7 @@
 """Core DeepPLF model.
 """
 from __future__ import annotations
-from typing import Optional, Union
+from typing import Optional, Union, Sequence
 from tqdm import tqdm
 import torch
 import numpy as np
@@ -28,10 +28,10 @@ class DeepPLF:
         self,
         lags: int,
         horizon: int,
-        breaks: int,
+        breaks: Union[float, int, Sequence] = 0.1,
         lam: float = 0.1,
         forecast_trend: str = "simple",
-        forecast_resid: str = "simple",
+        forecast_resid: str = "dense",
         dar_kwargs: Optional[dict] = None,
         plf_kwargs: Optional[dict] = None,
     ):
@@ -80,9 +80,11 @@ class DeepPLF:
         y = torch.tensor(y, dtype=torch.float)
         batch_size = len(X) if batch_size is None else batch_size
         batches = int(max(np.ceil(len(X) / batch_size), 1))
+        if model.name == "PiecewiseLinearRegression":
+            model(X)
         optimizer = getattr(torch.optim, optim)(model.parameters(), lr=lr)
         lossfunc = getattr(torch.nn, loss)()
-        for epoch in tqdm(range(epochs), desc=model.__class__.__name__):
+        for epoch in tqdm(range(epochs), desc=model.name):
             _ = epoch
             for batch in range(batches):
                 # print(
@@ -196,19 +198,26 @@ class DeepPLF:
         Xy: Union[np.ndarray, pd.Series, pd.DataFrame],
         y: Optional[np.ndarray] = None,
         mod: Optional[str] = None,
+        keep_type: bool = True,
     ) -> np.ndarray:
         """Predict from data."""
         if isinstance(Xy, pd.DataFrame):
-            X = Xy.index
-            y = Xy.iloc[:, 1].values
+            to_type = pd.DataFrame
+            X = Xy.index.values
+            y = Xy.iloc[:, 0].values
         elif isinstance(Xy, pd.Series):
-            X = Xy.index
+            to_type = pd.Series
+            X = Xy.index.values
             y = Xy.values
         elif isinstance(Xy, np.ndarray) and y is not None:
+            to_type = lambda arr: arr
             X = Xy
         else:
             raise NotImplementedError
-        return self._predict_from_array(X, y, mod=mod)
+        pred = self._predict_from_array(X, y, mod=mod)
+        if keep_type:
+            return to_type(pred.detach().numpy().flatten())
+        return pred
 
     def forecast(self):
         """Forecast n steps."""

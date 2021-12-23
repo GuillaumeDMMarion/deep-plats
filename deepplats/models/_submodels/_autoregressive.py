@@ -13,6 +13,8 @@ class AutoregressiveForecasting(torch.nn.Module):
         horizon. Number of futre steps to forecast.
     """
 
+    name = "AutoregressiveForecasting"
+
     def __init__(self, lags: int, horizon: int, **kwargs):
         super().__init__()
         final_inputs, hidden_layers = self._create_hidden_layers(lags, **kwargs)
