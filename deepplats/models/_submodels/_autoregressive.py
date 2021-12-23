@@ -1,10 +1,19 @@
-"""
+"""Module containing torch models for autoregressive analysis.
 """
 import torch
 
+# pylint:disable=arguments-differ
+
 
 class AutoregressiveForecasting(torch.nn.Module):
-    def __init__(self, lags, horizon, **kwargs):
+    """Base autoregressive forecasting.
+
+    Args:
+        lags: Number of historical steps to use as input.
+        horizon. Number of futre steps to forecast.
+    """
+
+    def __init__(self, lags: int, horizon: int, **kwargs):
         super().__init__()
         final_inputs, hidden_layers = self._create_hidden_layers(lags, **kwargs)
         self.hidden_model = self._create_hidden_model(hidden_layers)
@@ -22,16 +31,29 @@ class AutoregressiveForecasting(torch.nn.Module):
 
     @staticmethod
     def _create_hidden_layers(lags, **kwargs):
+        _ = kwargs
         hidden_layers = []
         return lags, hidden_layers
 
     def forward(self, X):
+        """Torch.nn forward."""
         staged_X = self.hidden_model(X)
         output = self.output_layer(staged_X)
         return output
 
 
 class DenseAutoregressiveForecasting(AutoregressiveForecasting):
+    """Dense autoregressive forecasting.
+
+    Args:
+        lags: Number of historical steps to use as input.
+        horizon. Number of futre steps to forecast.
+        n_hidden_layers: Number of hidden dense layers.
+        size_hidden_layers: Number of units in each dense layer.
+        activation: Activation function to use.
+        dropout: Value for dropout layers. No layer is added if value is set to zero.
+    """
+
     def __init__(
         self,
         lags,
