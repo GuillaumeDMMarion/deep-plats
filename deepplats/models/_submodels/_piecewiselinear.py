@@ -111,7 +111,7 @@ class RNNPiecewiseLinearForecasting(PiecewiseLinearForecasting):
         horizon: int = 1,
         plr: Union[float, int, Sequence, PiecewiseLinearRegression] = 0.2,
         model: str = "LSTM",
-        n_features: int = 2,
+        n_features: int = 1,
         hidden_size: int = 2,
         num_layers: int = 1,
         last_step: bool = True,
