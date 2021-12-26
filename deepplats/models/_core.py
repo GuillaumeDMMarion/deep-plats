@@ -2,6 +2,7 @@
 """
 from __future__ import annotations
 from typing import Optional, Union, Sequence
+
 from tqdm import tqdm
 import torch
 import numpy as np
@@ -31,7 +32,7 @@ class DeepPLF:
         breaks: Union[float, int, Sequence] = 0.1,
         lam: float = 0.1,
         forecast_trend: str = "simple",
-        forecast_resid: str = "dense",
+        forecast_resid: Union[bool, str] = False,
         dar_kwargs: Optional[dict] = None,
         plf_kwargs: Optional[dict] = None,
     ):
@@ -45,24 +46,32 @@ class DeepPLF:
         plf_kwargs = {} if plf_kwargs is None else plf_kwargs
         self.plr = PiecewiseLinearRegression(breaks)
         self.plf = self._init_plf_model(
-            forecast_trend, horizon=horizon, plr=self.plr, **plf_kwargs
+            forecast_trend, lags=lags, horizon=horizon, plr=self.plr, **plf_kwargs
         )
         self.dar = self._init_dar_model(
             forecast_resid, lags=lags, horizon=horizon, **dar_kwargs
         )
 
     @staticmethod
-    def _init_plf_model(method, horizon, plr, **kwargs):
+    def _init_plf_model(method, lags, horizon, plr, **kwargs):
         _ = kwargs
         if method == "simple":
             return PiecewiseLinearForecasting(horizon=horizon, plr=plr)
+        elif method == "rnn":
+            return RNNPiecewiseLinearForecasting(
+                lags=lags, horizon=horizon, plr=plr, **kwargs
+            )
+        raise NotImplementedError
 
     @staticmethod
     def _init_dar_model(method, lags, horizon, **kwargs):
-        if (isinstance(method, bool) and method is True) or method == "simple":
+        if isinstance(method, bool) and method is False:
+            return None
+        elif (isinstance(method, bool) and method is True) or method == "simple":
             return AutoregressiveForecasting(lags=lags, horizon=horizon)
         elif method == "dense":
             return DenseAutoregressiveForecasting(lags=lags, horizon=horizon, **kwargs)
+        raise NotImplementedError
 
     @staticmethod
     def _train_model(
@@ -97,7 +106,9 @@ class DeepPLF:
                 optimizer.zero_grad()
                 loss = lossfunc(y_batch, y_hat)
                 if lam:
-                    for w in model.parameters():
+                    for k, w in model.named_parameters():
+                        if k == "breaks":
+                            continue
                         if w.dim() > 1:
                             loss = loss + lam * w.norm(1)
                 loss.backward()
@@ -128,9 +139,17 @@ class DeepPLF:
         )
         self.plr.eval()
         if self.forecast_trend != "simple":
-            raise NotImplementedError
-            Xr = self._roll_arr(X, self.horizon)
-            yr = self._roll_arr(y, self.horizon)
+            seq_length = self.lags
+            # y_roll = self._roll_arr(y, seq_length)[:-1]
+            target = y[seq_length:]
+            trend = (
+                self._call_model(X[:, None, None], self.plr).detach().numpy().flatten()
+            )
+            trend_roll = self._roll_arr(trend, seq_length)[:-1]
+            # x_roll = self._roll_arr(X, seq_length)[:-1]
+            # Xr = np.stack([x_roll.T, y_roll.T, trend_roll.T]).T
+            Xr = np.stack([trend_roll.T]).T
+            yr = target[:, None]
             self._train_model(
                 Xr,
                 yr,
@@ -158,14 +177,25 @@ class DeepPLF:
             )
 
     def _predict_from_array(self, X, y, mod):
-        Xr = self._roll_arr(X, self.lags)
         result = 0
-        ylaggr = self._roll_arr(y, self.lags)
         if mod is None or mod == "trend":
             self.plf.eval()
-            result += self._call_model(Xr, self.plf)
+            if self.forecast_trend == "simple":
+                Xr = self._roll_arr(X, self.lags)
+                result += self._call_model(Xr, self.plf)
+            else:
+                trend = (
+                    self._call_model(X[:, None, None], self.plr)
+                    .detach()
+                    .numpy()
+                    .flatten()
+                )
+                trend_roll = self._roll_arr(trend, self.lags)
+                Xr = np.vstack(trend_roll.T).T
+                result += self._call_model(Xr, self.plf)
         if (mod is None or mod == "resid") and self.forecast_resid is not False:
             self.dar.eval()
+            ylaggr = self._roll_arr(y, self.lags)
             result += self._call_model(ylaggr, self.dar)
         return result
 

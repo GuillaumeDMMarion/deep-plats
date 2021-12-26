@@ -2,9 +2,10 @@
 """
 from __future__ import annotations
 from typing import Union, Sequence
+
 import torch
 
-from ._utils import Scaler, FlattenLSTM
+from ._utils import FlattenLSTM  # Scaler
 
 
 class PiecewiseLinearRegression(torch.nn.Module):
@@ -55,8 +56,12 @@ class PiecewiseLinearForecasting(torch.nn.Module):
         plr: A breaks paramter value or the actual regression model.
     """
 
+    name = "PiecewiseLinearForecasting"
+
     def __init__(
-        self, horizon: int, plr: Union[float, int, Sequence, PiecewiseLinearRegression]
+        self,
+        horizon: int = 1,
+        plr: Union[float, int, Sequence, PiecewiseLinearRegression] = 0.2,
     ):
         super().__init__()
         self.horizon = horizon
@@ -94,6 +99,7 @@ class RNNPiecewiseLinearForecasting(PiecewiseLinearForecasting):
     """RNN-based forecasting (on) piecewise linear sections.
 
     Args:
+        lags: Length of the input sequence.
         horizon: Future number of steps to forecast.
         plr: A breaks paramter value or the actual regression model.
         model: Specific RNN model to be used. One of 'RNN', 'GRU' or 'LSTM'.
@@ -101,12 +107,37 @@ class RNNPiecewiseLinearForecasting(PiecewiseLinearForecasting):
 
     def __init__(
         self,
-        horizon: int,
-        plr: Union[float, int, Sequence, PiecewiseLinearRegression],
-        model: Union[torch.nn.LSTM, torch.nn.GRU, torch.nn.RNN],
+        lags: int = 10,
+        horizon: int = 1,
+        plr: Union[float, int, Sequence, PiecewiseLinearRegression] = 0.2,
+        model: str = "LSTM",
+        n_features: int = 2,
+        hidden_size: int = 2,
+        num_layers: int = 1,
+        last_step: bool = True,
     ):
         super().__init__(horizon=horizon, plr=plr)
         self.model = model
+        self.seq_length = lags
+        self.n_features = n_features
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+        self.last_step = last_step
+        self.linear_input_size = self.hidden_size
+        if not self.last_step:
+            self.hidden_size *= self.seq_length
+        self.rnn = getattr(torch.nn, self.model)(
+            input_size=self.n_features,
+            hidden_size=self.hidden_size,
+            num_layers=self.num_layers,
+            batch_first=True,
+        )
+        self.flatten = FlattenLSTM(last_step=self.last_step)
+        self.out = torch.nn.Linear(self.linear_input_size, self.horizon)  # 1
 
     def forward(self, X: torch.Tensor) -> torch.Tensor:
-        return X
+        """Torch.nn forward"""
+        res = self.rnn(X)
+        res = self.flatten(res)
+        out = self.out(res)
+        return out
