@@ -4,6 +4,8 @@ from __future__ import annotations
 from typing import Union, Sequence
 import torch
 
+from ._utils import Scaler, FlattenLSTM
+
 
 class PiecewiseLinearRegression(torch.nn.Module):
     """Regression for obtaining piecewise linear sections.
@@ -68,9 +70,43 @@ class PiecewiseLinearForecasting(torch.nn.Module):
             return plr
         return PiecewiseLinearRegression(breaks=plr)
 
+    @staticmethod
+    def _plr_extrapolation(
+        X: torch.Tensor, plr: PiecewiseLinearRegression, horizon: int
+    ) -> torch.Tensor:
+        """Default extrapolation method"""
+        X = X + horizon
+        X_unsqueezed = X.unsqueeze(-1)
+        plr_extrapolation = plr(X_unsqueezed).squeeze(-1)[:, -horizon:]
+        return plr_extrapolation
+
+    def extrapolate(self, X: torch.Tensor) -> torch.Tensor:
+        """Extrapolation method"""
+        return self._plr_extrapolation(X, plr=self.plr, horizon=self.horizon)
+
     def forward(self, X: torch.Tensor) -> torch.Tensor:
         """Torch.nn forward."""
-        X = X + self.horizon
-        X_unsqueezed = X.unsqueeze(-1)
-        plr_result = self.plr(X_unsqueezed).squeeze(-1)[:, -self.horizon :]
-        return plr_result
+        result = self.extrapolate(X)
+        return result
+
+
+class RNNPiecewiseLinearForecasting(PiecewiseLinearForecasting):
+    """RNN-based forecasting (on) piecewise linear sections.
+
+    Args:
+        horizon: Future number of steps to forecast.
+        plr: A breaks paramter value or the actual regression model.
+        model: Specific RNN model to be used. One of 'RNN', 'GRU' or 'LSTM'.
+    """
+
+    def __init__(
+        self,
+        horizon: int,
+        plr: Union[float, int, Sequence, PiecewiseLinearRegression],
+        model: Union[torch.nn.LSTM, torch.nn.GRU, torch.nn.RNN],
+    ):
+        super().__init__(horizon=horizon, plr=plr)
+        self.model = model
+
+    def forward(self, X: torch.Tensor) -> torch.Tensor:
+        return X
