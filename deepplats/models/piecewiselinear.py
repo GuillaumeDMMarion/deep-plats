@@ -1,7 +1,7 @@
 """Module containing torch models for piecewise linear analysis.
 """
 from __future__ import annotations
-from typing import Union, Sequence
+from typing import Union, Sequence, Generator
 
 import torch
 
@@ -65,7 +65,8 @@ class PiecewiseLinearForecasting(torch.nn.Module):
     ):
         super().__init__()
         self.horizon = horizon
-        self.plr = self._init_plr(plr)
+        with torch.no_grad():
+            self.plr = self._init_plr(plr)
 
     @staticmethod
     def _init_plr(
@@ -84,6 +85,16 @@ class PiecewiseLinearForecasting(torch.nn.Module):
         X_unsqueezed = X.unsqueeze(-1)
         plr_extrapolation = plr(X_unsqueezed).squeeze(-1)[:, -horizon:]
         return plr_extrapolation
+
+    def named_parameters(self, prefix="", recurse: bool = True) -> Generator:
+        """Generate all but 'plr' parameters.
+        Note: Effectively overrides parameters method too.
+        """
+        return (
+            item
+            for item in super().named_parameters(prefix=prefix, recurse=recurse)
+            if not item[0].startswith("plr.")
+        )
 
     def extrapolate(self, X: torch.Tensor) -> torch.Tensor:
         """Extrapolation method"""

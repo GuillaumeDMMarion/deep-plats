@@ -82,6 +82,17 @@ class DeepPLF:
         raise NotImplementedError
 
     @staticmethod
+    def _extract_kwargs(kwargs: dict, prefix: str, strip: bool = True) -> dict:
+        strip_func = lambda s: s.replace(f"{prefix}_", "") if strip else s
+        return {strip_func(k): v for k, v in kwargs.items() if k.startswith(prefix)}
+
+    @staticmethod
+    def _nest_kwargs(kwargs: dict, prefixes: Union[list, tuple]) -> dict:
+        return dict(
+            zip(prefixes, map(lambda p: DeepPLF._extract_kwargs(kwargs, p), prefixes))
+        )
+
+    @staticmethod
     def _train_model(
         X,
         y,
@@ -117,7 +128,7 @@ class DeepPLF:
                     for k, w in model.named_parameters():
                         if k == "breaks":
                             continue
-                        if w.dim() > 1:
+                        elif w.dim() > 1:
                             loss = loss + lam * w.norm(1)
                 loss.backward()
                 optimizer.step()
@@ -134,60 +145,70 @@ class DeepPLF:
         result = np.lib.stride_tricks.as_strided(arr, shape=shape, strides=strides)
         return result.copy()
 
-    def _fit_from_array(self, X, y, epochs, batch_size, **kwargs):
-        self.plr.train(True)
+    def _fit_plr_from_array(self, X, y, epochs, batch_size, **kwargs):
+        self.plr.train()
         self._train_model(
             X[:, None, None],
             y[:, None, None],
             self.plr,
             epochs=epochs,
             batch_size=batch_size,
-            lam=self.lam,
-            **kwargs
+            # lam=self.lam,
+            **kwargs,
         )
         self.plr.eval()
+
+    def _fit_plf_from_array(self, X, y, epochs, batch_size, **kwargs):
+        self.plf.train()
+        seq_length = self.lags
+        # y_roll = self._roll_arr(y, seq_length)[:-1]
+        target = y[seq_length:]
+        trend = self._call_model(X[:, None, None], self.plr).detach().numpy().flatten()
+        trend_roll = self._roll_arr(trend, seq_length)[:-1]
+        # x_roll = self._roll_arr(X, seq_length)[:-1]
+        # Xr = np.stack([x_roll.T, y_roll.T, trend_roll.T]).T
+        Xr = np.stack([trend_roll.T]).T
+        yr = target[:, None]
+        self._train_model(
+            Xr,
+            yr,
+            self.plf,
+            epochs=epochs,
+            batch_size=batch_size,
+            # lam=self.lam,
+            **kwargs,
+        )
+        self.plf.eval()
+
+    def _fit_dar_from_array(self, X, y, epochs, batch_size, **kwargs):
+        self.dar.train()
+        yhat = self._call_model(X[:, None, None], self.plr).detach().numpy().flatten()
+        ydiff = y - yhat
+        ydiffr = self._roll_arr(ydiff[self.lags :], self.horizon)
+        ylaggr = self._roll_arr(y[: -self.horizon], self.lags)
+        self._train_model(
+            ylaggr,
+            ydiffr,
+            self.dar,
+            epochs=epochs,
+            batch_size=batch_size,
+            # lam=self.lam,
+            **kwargs,
+        )
+        self.dar.eval()
+
+    def _fit_from_array(self, X, y, epochs, batch_size, **kwargs):
+        kwargs = self._nest_kwargs(kwargs, prefixes=["plr", "plf", "dar"])
+        base_kwargs = {"epochs": epochs, "batch_size": batch_size}
+        self._fit_plr_from_array(X, y, **{**base_kwargs, **kwargs["plr"]})
         if self.forecast_trend != "simple":
-            seq_length = self.lags
-            # y_roll = self._roll_arr(y, seq_length)[:-1]
-            target = y[seq_length:]
-            trend = (
-                self._call_model(X[:, None, None], self.plr).detach().numpy().flatten()
-            )
-            trend_roll = self._roll_arr(trend, seq_length)[:-1]
-            # x_roll = self._roll_arr(X, seq_length)[:-1]
-            # Xr = np.stack([x_roll.T, y_roll.T, trend_roll.T]).T
-            Xr = np.stack([trend_roll.T]).T
-            yr = target[:, None]
-            self._train_model(
-                Xr,
-                yr,
-                self.plf,
-                epochs=epochs,
-                batch_size=batch_size,
-                lam=self.lam,
-                **kwargs
-            )
+            self._fit_plf_from_array(X, y, **{**base_kwargs, **kwargs["plf"]})
         if self.forecast_resid is not False:
-            yhat = (
-                self._call_model(X[:, None, None], self.plr).detach().numpy().flatten()
-            )
-            ydiff = y - yhat
-            ydiffr = self._roll_arr(ydiff[self.lags :], self.horizon)
-            ylaggr = self._roll_arr(y[: -self.horizon], self.lags)
-            self._train_model(
-                ylaggr,
-                ydiffr,
-                self.dar,
-                epochs=epochs,
-                batch_size=batch_size,
-                lam=self.lam,
-                **kwargs
-            )
+            self._fit_dar_from_array(X, y, **{**base_kwargs, **kwargs["dar"]})
 
     def _predict_from_array(self, X, y, mod):
         result = 0
         if mod is None or mod == "trend":
-            self.plf.eval()
             if self.forecast_trend == "simple":
                 Xr = self._roll_arr(X, self.lags)
                 result += self._call_model(Xr, self.plf)
@@ -202,7 +223,6 @@ class DeepPLF:
                 Xr = np.stack([trend_roll.T]).T
                 result += self._call_model(Xr, self.plf)
         if (mod is None or mod == "resid") and self.forecast_resid is not False:
-            self.dar.eval()
             ylaggr = self._roll_arr(y, self.lags)
             result += self._call_model(ylaggr, self.dar)
         return result
@@ -212,9 +232,9 @@ class DeepPLF:
         Xy: Union[np.ndarray, pd.Series, pd.DataFrame],
         y: Optional[np.ndarray] = None,
         *,
-        epochs: int,
+        epochs: int = 100,
         batch_size: Optional[int] = None,
-        **kwargs
+        **kwargs,
     ) -> DeepPLF:
         """Fit on data."""
         if isinstance(Xy, pd.DataFrame):
