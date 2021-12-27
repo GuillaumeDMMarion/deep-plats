@@ -7,7 +7,10 @@ import torch
 
 
 class Scaler:
-    """Standard scaler object."""
+    """
+    Standardize features by removing the mean and scaling to unit variance.
+    Accepts both torch.Tensor and numpy.ndarray.
+    """
 
     def __init__(self):
         self.mean = None
@@ -15,6 +18,7 @@ class Scaler:
 
     def fit(self, X: Union[np.ndarray, torch.Tensor]) -> Scaler:
         """Extract mean and std from training."""
+        mean_kwargs = std_kwargs = {}
         if isinstance(X, torch.Tensor):
             mean_kwargs = dict(keepdim=True)
             std_kwargs = dict(unbiased=False, keepdim=True)
@@ -30,6 +34,13 @@ class Scaler:
         X -= self.mean
         X /= self.std + +1e-7
         return X
+
+    def fit_transform(
+        self, X: Union[np.ndarray, torch.Tensor]
+    ) -> Union[np.ndarray, torch.Tensor]:
+        """Fit, then transform array."""
+        self.fit(X)
+        return self.transform(X)
 
 
 class FlattenLSTM(torch.nn.Module):

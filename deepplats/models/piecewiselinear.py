@@ -5,7 +5,7 @@ from typing import Union, Sequence
 
 import torch
 
-from ._utils import FlattenLSTM  # Scaler
+from .utils import FlattenLSTM  # Scaler
 
 
 class PiecewiseLinearRegression(torch.nn.Module):

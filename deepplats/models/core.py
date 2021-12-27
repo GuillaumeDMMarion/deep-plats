@@ -8,7 +8,15 @@ import torch
 import numpy as np
 import pandas as pd
 
-from ._submodels import *
+from .autoregressive import (
+    AutoregressiveForecasting,
+    DenseAutoregressiveForecasting,
+)
+from .piecewiselinear import (
+    PiecewiseLinearRegression,
+    PiecewiseLinearForecasting,
+    RNNPiecewiseLinearForecasting,
+)
 
 
 class DeepPLF:
@@ -191,7 +199,7 @@ class DeepPLF:
                     .flatten()
                 )
                 trend_roll = self._roll_arr(trend, self.lags)
-                Xr = np.vstack(trend_roll.T).T
+                Xr = np.stack([trend_roll.T]).T
                 result += self._call_model(Xr, self.plf)
         if (mod is None or mod == "resid") and self.forecast_resid is not False:
             self.dar.eval()
