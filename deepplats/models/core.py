@@ -94,19 +94,20 @@ class DeepPLF:
 
     @staticmethod
     def _train_model(
-        X,
-        y,
-        model,
-        epochs,
-        batch_size=None,
-        lam=0,
-        optim="Adam",
-        lr=0.1,
-        loss="MSELoss",
-    ):
+        X: torch.Tensor,
+        y: torch.Tensor,
+        model: torch.nn.Model,
+        epochs: int,
+        batch_size: Union[int, float],
+        lam: float,
+        optim: str,
+        lr: float,
+        loss: str,
+    ) -> None:
         X = torch.tensor(X, dtype=torch.float)
         y = torch.tensor(y, dtype=torch.float)
-        batch_size = len(X) if batch_size is None else batch_size
+        if isinstance(batch_size, float):
+            batch_size = int(len(X) * batch_size)
         batches = int(max(np.ceil(len(X) / batch_size), 1))
         if model.name == "PiecewiseLinearRegression":
             model(X)
@@ -115,10 +116,6 @@ class DeepPLF:
         for epoch in tqdm(range(epochs), desc=model.name):
             _ = epoch
             for batch in range(batches):
-                # print(
-                # f'epoch: {epoch+1}/{epochs}',
-                # f'batch: {batch+1}/{batches}',
-                # f'batch_size: {batch_size}')
                 X_batch = X[batch * batch_size : (batch + 1) * batch_size]
                 y_batch = y[batch * batch_size : (batch + 1) * batch_size]
                 y_hat = model(X_batch)
@@ -145,20 +142,32 @@ class DeepPLF:
         result = np.lib.stride_tricks.as_strided(arr, shape=shape, strides=strides)
         return result.copy()
 
-    def _fit_plr_from_array(self, X, y, epochs, batch_size, **kwargs):
+    def _fit_plr_from_array(self, X, y, epochs, **kwargs):
+        base_kwargs = {
+            "batch_size": 1.0,
+            "lam": 0.0,
+            "optim": "Adam",
+            "lr": 0.001,
+            "loss": "MSELoss",
+        }
         self.plr.train()
         self._train_model(
             X[:, None, None],
             y[:, None, None],
             self.plr,
             epochs=epochs,
-            batch_size=batch_size,
-            # lam=self.lam,
-            **kwargs,
+            **{**base_kwargs, **kwargs},
         )
         self.plr.eval()
 
-    def _fit_plf_from_array(self, X, y, epochs, batch_size, **kwargs):
+    def _fit_plf_from_array(self, X, y, epochs, **kwargs):
+        base_kwargs = {
+            "batch_size": 0.2,
+            "lam": 0.05,
+            "optim": "Adam",
+            "lr": 0.05,
+            "loss": "MSELoss",
+        }
         self.plf.train()
         seq_length = self.lags
         # y_roll = self._roll_arr(y, seq_length)[:-1]
@@ -174,13 +183,18 @@ class DeepPLF:
             yr,
             self.plf,
             epochs=epochs,
-            batch_size=batch_size,
-            # lam=self.lam,
-            **kwargs,
+            **{**base_kwargs, **kwargs},
         )
         self.plf.eval()
 
-    def _fit_dar_from_array(self, X, y, epochs, batch_size, **kwargs):
+    def _fit_dar_from_array(self, X, y, epochs, **kwargs):
+        base_kwargs = {
+            "batch_size": 0.2,
+            "lam": 0.05,
+            "optim": "Adam",
+            "lr": 0.05,
+            "loss": "MSELoss",
+        }
         self.dar.train()
         yhat = self._call_model(X[:, None, None], self.plr).detach().numpy().flatten()
         ydiff = y - yhat
@@ -191,15 +205,14 @@ class DeepPLF:
             ydiffr,
             self.dar,
             epochs=epochs,
-            batch_size=batch_size,
-            # lam=self.lam,
-            **kwargs,
+            **{**base_kwargs, **kwargs},
         )
         self.dar.eval()
 
     def _fit_from_array(self, X, y, epochs, batch_size, **kwargs):
         kwargs = self._nest_kwargs(kwargs, prefixes=["plr", "plf", "dar"])
         base_kwargs = {"epochs": epochs, "batch_size": batch_size}
+        base_kwargs = {k: v for k, v in base_kwargs.items() if v}
         self._fit_plr_from_array(X, y, **{**base_kwargs, **kwargs["plr"]})
         if self.forecast_trend != "simple":
             self._fit_plf_from_array(X, y, **{**base_kwargs, **kwargs["plf"]})
@@ -233,7 +246,7 @@ class DeepPLF:
         y: Optional[np.ndarray] = None,
         *,
         epochs: int = 100,
-        batch_size: Optional[int] = None,
+        batch_size: Optional[Union[int, float]] = None,
         **kwargs,
     ) -> DeepPLF:
         """Fit on data."""
