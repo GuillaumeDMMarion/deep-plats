@@ -23,16 +23,25 @@ class Scaler:
             mean_kwargs = dict(keepdim=True)
             std_kwargs = dict(unbiased=False, keepdim=True)
         self.mean = X.mean(0, **mean_kwargs)
-        self.std = X.std(0, **std_kwargs)
+        self.std = X.std(0, **std_kwargs) + 1e-7
         return self
 
     def transform(
         self, X: Union[np.ndarray, torch.Tensor]
     ) -> Union[np.ndarray, torch.Tensor]:
         """Transform array."""
-        X = X.copy()
+        X = X.astype(float).copy()
         X -= self.mean
-        X /= self.std + +1e-7
+        X /= self.std
+        return X
+
+    def inverse_transform(
+        self, X: Union[np.ndarray, torch.Tensor]
+    ) -> Union[np.ndarray, torch.Tensor]:
+        """Transform array."""
+        X = X.astype(float).copy()
+        X *= self.std
+        X += self.mean
         return X
 
     def fit_transform(
