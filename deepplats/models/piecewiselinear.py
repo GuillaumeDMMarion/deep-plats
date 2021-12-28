@@ -20,7 +20,7 @@ class PiecewiseLinearRegression(torch.nn.Module):
 
     name = "PiecewiseLinearRegression"
 
-    def __init__(self, breaks: Union[float, int, Sequence] = 0.2):
+    def __init__(self, breaks: Union[float, int, Sequence] = 0.1):
         super().__init__()
         self.breaks = breaks
         self.piecewise = None

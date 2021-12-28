@@ -163,9 +163,9 @@ class DeepPLF:
     def _fit_plf_from_array(self, X, y, epochs, **kwargs):
         base_kwargs = {
             "batch_size": 0.2,
-            "lam": 0.05,
+            "lam": 0.0,
             "optim": "Adam",
-            "lr": 0.05,
+            "lr": 0.001,
             "loss": "MSELoss",
         }
         self.plf.train()
@@ -190,9 +190,9 @@ class DeepPLF:
     def _fit_dar_from_array(self, X, y, epochs, **kwargs):
         base_kwargs = {
             "batch_size": 0.2,
-            "lam": 0.05,
+            "lam": 0.0,
             "optim": "Adam",
-            "lr": 0.05,
+            "lr": 0.001,
             "loss": "MSELoss",
         }
         self.dar.train()
