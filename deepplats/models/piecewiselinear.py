@@ -15,7 +15,7 @@ class PiecewiseLinearRegression(torch.nn.Module):
         breaks: Either number of breaks, in absolute terms or relative to the sequence length,
                 or an initial sequence of breaks.
         scale: Whether to scale X by default or not. If set to False,
-               for best results scale X prior to fitting.
+               for best results scale X separately prior to fitting.
 
     credits to: https://stackoverflow.com/users/6922739/matt-motoki
     """
