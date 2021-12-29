@@ -5,27 +5,33 @@ from typing import Union, Sequence, Generator
 
 import torch
 
-from .utils import FlattenLSTM  # Scaler
+from .utils import FlattenLSTM, Scaler
 
 
 class PiecewiseLinearRegression(torch.nn.Module):
     """Regression for obtaining piecewise linear sections.
 
     Args:
-        breaks: Absolute number of breaks or relative to the length of the sequence
-                Initial breaks can be provided too.
+        breaks: Either number of breaks, in absolute terms or relative to the sequence length,
+                or an initial sequence of breaks.
+        scale: Whether to scale X by default or not. If set to False,
+               for best results scale X prior to fitting.
 
     credits to: https://stackoverflow.com/users/6922739/matt-motoki
     """
 
     name = "PiecewiseLinearRegression"
 
-    def __init__(self, breaks: Union[float, int, Sequence] = 0.1):
+    def __init__(self, breaks: Union[float, int, Sequence] = 0.1, scale: bool = True):
         super().__init__()
         self.breaks = breaks
+        self.scale = scale
+        self.scaler = Scaler()
         self.piecewise = None
         if not isinstance(self.breaks, (float, int)):
-            self.breaks = torch.nn.Parameter(torch.tensor([breaks], dtype=torch.float))
+            self.breaks = torch.nn.Parameter(
+                torch.tensor([breaks], dtype=torch.float32)
+            )
             self.piecewise = torch.nn.Linear(self.breaks.size(1) + 1, 1)
 
     @staticmethod
@@ -34,11 +40,15 @@ class PiecewiseLinearRegression(torch.nn.Module):
     ) -> torch.nn.Paramter:
         n_breaks = breaks if isinstance(breaks, int) else int(X.size(0) * breaks)
         return torch.nn.Parameter(
-            torch.linspace(X.min(), X.max(), n_breaks, dtype=torch.float)[None, :]
+            torch.linspace(X.min(), X.max(), n_breaks, dtype=torch.float32)[None, :]
         )
 
     def forward(self, X: torch.Tensor) -> torch.Tensor:
         """Torch.nn forward."""
+        if self.scale:
+            if not self.scaler.fitted:
+                self.scaler.fit(X)
+            X = self.scaler.transform(X).clone()
         if not isinstance(self.breaks, torch.nn.Parameter):
             self.breaks = self._get_default_breaks(X, self.breaks)
             self.piecewise = torch.nn.Linear(self.breaks.size(1) + 1, 1)
