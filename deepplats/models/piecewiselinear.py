@@ -161,8 +161,8 @@ class RNNPiecewiseLinearForecasting(PiecewiseLinearForecasting):
 
     def forward(self, X: torch.Tensor) -> torch.Tensor:
         """Torch.nn forward"""
-        if self.plr.scale:
-            X = self.plr.scaler.transform(X).clone()
+        # if self.plr.scale:
+        #     X = self.plr.scaler.transform(X).clone()
         res = self.rnn(X)
         res = self.flatten(res)
         out = self.out(res)

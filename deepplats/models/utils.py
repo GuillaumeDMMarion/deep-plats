@@ -33,8 +33,8 @@ class Scaler:
         if isinstance(X, torch.Tensor):
             mean_kwargs = dict(keepdim=True)
             std_kwargs = dict(unbiased=False, keepdim=True)
-        self.mean = X.mean(0, **mean_kwargs)
-        self.std = X.std(0, **std_kwargs) + 1e-7
+        self.mean = float(X.mean(0, **mean_kwargs))
+        self.std = float(X.std(0, **std_kwargs) + 1e-7)
         self.fitted = True
         return self
 
@@ -86,7 +86,7 @@ class XScaler(Scaler):
         ), "Time should be monotonically increasing."
         fit_res = super().fit(X)
         transform = super().transform(X)
-        self.step = self._extract_steps(transform)[0]
+        self.step = float(self._extract_steps(transform)[0])
         return fit_res
 
 
