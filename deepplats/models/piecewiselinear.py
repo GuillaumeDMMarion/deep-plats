@@ -5,7 +5,7 @@ from typing import Union, Sequence, Generator
 
 import torch
 
-from .utils import FlattenLSTM, Scaler
+from .utils import FlattenLSTM, XScaler
 
 
 class PiecewiseLinearRegression(torch.nn.Module):
@@ -23,10 +23,11 @@ class PiecewiseLinearRegression(torch.nn.Module):
     name = "PiecewiseLinearRegression"
 
     def __init__(self, breaks: Union[float, int, Sequence] = 0.1, scale: bool = True):
+
         super().__init__()
         self.breaks = breaks
         self.scale = scale
-        self.scaler = Scaler()
+        self.scaler = XScaler() if self.scale else None
         self.piecewise = None
         if not isinstance(self.breaks, (float, int)):
             self.breaks = torch.nn.Parameter(
@@ -88,10 +89,10 @@ class PiecewiseLinearForecasting(torch.nn.Module):
 
     @staticmethod
     def _plr_extrapolation(
-        X: torch.Tensor, plr: PiecewiseLinearRegression, horizon: int
+        X: torch.Tensor, plr: PiecewiseLinearRegression, horizon: int, step: float
     ) -> torch.Tensor:
         """Default extrapolation method"""
-        X = X + horizon
+        X = X + (horizon * step)
         X_unsqueezed = X.unsqueeze(-1)
         plr_extrapolation = plr(X_unsqueezed).squeeze(-1)[:, -horizon:]
         return plr_extrapolation
@@ -106,9 +107,11 @@ class PiecewiseLinearForecasting(torch.nn.Module):
             if not item[0].startswith("plr.")
         )
 
-    def extrapolate(self, X: torch.Tensor) -> torch.Tensor:
+    def extrapolate(self, X: torch.Tensor, horizon=None) -> torch.Tensor:
         """Extrapolation method"""
-        return self._plr_extrapolation(X, plr=self.plr, horizon=self.horizon)
+        horizon = horizon if horizon else self.horizon
+        step = self.plr.scaler.step if self.plr.scale else X.flatten().diff()[0]
+        return self._plr_extrapolation(X, plr=self.plr, horizon=horizon, step=step)
 
     def forward(self, X: torch.Tensor) -> torch.Tensor:
         """Torch.nn forward."""
@@ -158,6 +161,8 @@ class RNNPiecewiseLinearForecasting(PiecewiseLinearForecasting):
 
     def forward(self, X: torch.Tensor) -> torch.Tensor:
         """Torch.nn forward"""
+        if self.plr.scale:
+            X = self.plr.scaler.transform(X).clone()
         res = self.rnn(X)
         res = self.flatten(res)
         out = self.out(res)

@@ -64,6 +64,32 @@ class Scaler:
         return self.transform(X)
 
 
+class XScaler(Scaler):
+    """Scaler specific for monotonically increasing timesteps."""
+
+    def __init__(self, astype="float32"):
+        self.step = None
+        super().__init__(astype=astype)
+
+    @staticmethod
+    def _extract_steps(
+        X: Union[np.ndarray, torch.Tensor]
+    ) -> Union[np.ndarray, torch.Tensor]:
+        X_flat = X.flatten()
+        steps = np.diff(X_flat) if isinstance(X, np.ndarray) else X_flat.diff()
+        return steps
+
+    def fit(self, X: Union[np.ndarray, torch.Tensor]) -> Scaler:
+        untransformed_steps = self._extract_steps(X)
+        assert (
+            np.unique(untransformed_steps).size == 1
+        ), "Time should be monotonically increasing."
+        fit_res = super().fit(X)
+        transform = super().transform(X)
+        self.step = self._extract_steps(transform)[0]
+        return fit_res
+
+
 class FlattenLSTM(torch.nn.Module):
     """LSTM flattener"""
 

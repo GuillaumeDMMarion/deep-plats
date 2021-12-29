@@ -217,6 +217,7 @@ good-names=i,
            Xr,
            X_unsqueezed,
            staged_X,
+           X_flat,
 
 # Good variable names regexes, separated by a comma. If names match any regex,
 # they will always be accepted
