@@ -64,7 +64,7 @@ class Scaler:
         return self.transform(X)
 
 
-class XScaler(Scaler):
+class TimeScaler(Scaler):
     """Scaler specific for monotonically increasing timesteps."""
 
     def __init__(self, astype="float32"):

@@ -5,7 +5,7 @@ from typing import Union, Sequence, Generator
 
 import torch
 
-from .utils import FlattenLSTM, XScaler
+from .utils import FlattenLSTM, TimeScaler
 
 
 class PiecewiseLinearRegression(torch.nn.Module):
@@ -27,7 +27,7 @@ class PiecewiseLinearRegression(torch.nn.Module):
         super().__init__()
         self.breaks = breaks
         self.scale = scale
-        self.scaler = XScaler() if self.scale else None
+        self.scaler = TimeScaler() if self.scale else None
         self.piecewise = None
         if not isinstance(self.breaks, (float, int)):
             self.breaks = torch.nn.Parameter(
@@ -107,10 +107,10 @@ class PiecewiseLinearForecasting(torch.nn.Module):
             if not item[0].startswith("plr.")
         )
 
-    def extrapolate(self, X: torch.Tensor, horizon=None) -> torch.Tensor:
+    def extrapolate(self, X: torch.Tensor, horizon=None, step=None) -> torch.Tensor:
         """Extrapolation method"""
         horizon = horizon if horizon else self.horizon
-        step = self.plr.scaler.step if self.plr.scale else X.flatten().diff()[0]
+        step = 1 if (self.plr.scale or step is None) else step
         return self._plr_extrapolation(X, plr=self.plr, horizon=horizon, step=step)
 
     def forward(self, X: torch.Tensor) -> torch.Tensor:

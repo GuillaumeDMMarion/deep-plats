@@ -219,23 +219,24 @@ class DeepPLF:
         if self.forecast_resid is not False:
             self._fit_dar_from_array(X, y, **{**base_kwargs, **kwargs["dar"]})
 
-    def _predict_from_array(self, X, y, mod):
+    def _transform_from_array(self, X, y=None, model=None):
+        # pylint: disable=unused-argument
+        result = self._call_model(X[:, None, None], self.plr)
+        return result
+
+    def _predict_from_array(self, X, y, model):
         result = 0
-        if mod is None or mod == "trend":
+        if model is None or model == "trend":
             if self.forecast_trend == "simple":
                 Xr = self._roll_arr(X, self.lags)
                 result += self._call_model(Xr, self.plf)
             else:
-                trend = (
-                    self._call_model(X[:, None, None], self.plr)
-                    .detach()
-                    .numpy()
-                    .flatten()
-                )
+                trend = self._transform_from_array(X)
+                trend = trend.detach().numpy().flatten()
                 trend_roll = self._roll_arr(trend, self.lags)
                 Xr = np.stack([trend_roll.T]).T
                 result += self._call_model(Xr, self.plf)
-        if (mod is None or mod == "resid") and self.forecast_resid is not False:
+        if (model is None or model == "resid") and self.forecast_resid is not False:
             ylaggr = self._roll_arr(y, self.lags)
             result += self._call_model(ylaggr, self.dar)
         return result
@@ -264,14 +265,14 @@ class DeepPLF:
             X, y, epochs=epochs, batch_size=batch_size, **kwargs
         )
 
-    def predict(
+    def _transform_or_predict(
         self,
         Xy: Union[np.ndarray, pd.Series, pd.DataFrame],
         y: Optional[np.ndarray] = None,
-        mod: Optional[str] = None,
+        mode: str = "predict",
+        model: Optional[str] = None,
         keep_type: bool = True,
     ) -> np.ndarray:
-        """Predict from data."""
         if isinstance(Xy, pd.DataFrame):
             to_type = pd.DataFrame
             X = Xy.index.values
@@ -280,15 +281,40 @@ class DeepPLF:
             to_type = pd.Series
             X = Xy.index.values
             y = Xy.values
-        elif isinstance(Xy, np.ndarray) and y is not None:
+        elif isinstance(Xy, np.ndarray) and (y is not None or mode == "transform"):
             to_type = lambda arr: arr
             X = Xy
         else:
             raise NotImplementedError
-        pred = self._predict_from_array(X, y, mod=mod)
+        method = getattr(self, f"_{mode}_from_array")
+        result = method(X, y, model=model)
         if keep_type:
-            return to_type(pred.detach().numpy().flatten())
-        return pred
+            return to_type(result.detach().numpy().flatten())
+        return result
+
+    def transform(
+        self,
+        Xy: Union[np.ndarray, pd.Series, pd.DataFrame],
+        y: Optional[np.ndarray] = None,
+        model: Optional[str] = None,
+        keep_type: bool = True,
+    ) -> np.ndarray:
+        """Transform from data."""
+        return self._transform_or_predict(
+            Xy=Xy, y=y, mode="transform", model=model, keep_type=keep_type
+        )
+
+    def predict(
+        self,
+        Xy: Union[np.ndarray, pd.Series, pd.DataFrame],
+        y: Optional[np.ndarray] = None,
+        model: Optional[str] = None,
+        keep_type: bool = True,
+    ) -> np.ndarray:
+        """Predict from data."""
+        return self._transform_or_predict(
+            Xy=Xy, y=y, mode="predict", model=model, keep_type=keep_type
+        )
 
     def forecast(self):
         """Forecast n steps."""
