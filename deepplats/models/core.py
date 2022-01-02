@@ -170,13 +170,14 @@ class DeepPLF:
         }
         self.plf.train()
         seq_length = self.lags
-        # y_roll = self._roll_arr(y, seq_length)[:-1]
-        target = y[seq_length:]
+        # target = y[seq_length:] # y as target
+        y_roll = self._roll_arr(y, seq_length)[:-1]
         trend = self._call_model(X[:, None, None], self.plr).detach().numpy().flatten()
+        target = trend[seq_length:]  # trend as target
         trend_roll = self._roll_arr(trend, seq_length)[:-1]
         # x_roll = self._roll_arr(X, seq_length)[:-1]
         # Xr = np.stack([x_roll.T, y_roll.T, trend_roll.T]).T
-        Xr = np.stack([trend_roll.T]).T
+        Xr = np.stack([y_roll.T, trend_roll.T]).T
         yr = target[:, None]
         self._train_model(
             Xr,
@@ -231,10 +232,11 @@ class DeepPLF:
                 Xr = self._roll_arr(X, self.lags)
                 result += self._call_model(Xr, self.plf)
             else:
+                y_roll = self._roll_arr(y, self.lags)
                 trend = self._transform_from_array(X)
                 trend = trend.detach().numpy().flatten()
                 trend_roll = self._roll_arr(trend, self.lags)
-                Xr = np.stack([trend_roll.T]).T
+                Xr = np.stack([y_roll.T, trend_roll.T]).T
                 result += self._call_model(Xr, self.plf)
         if (model is None or model == "resid") and self.forecast_resid is not False:
             ylaggr = self._roll_arr(y, self.lags)
