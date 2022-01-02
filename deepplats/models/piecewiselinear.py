@@ -44,6 +44,13 @@ class PiecewiseLinearRegression(torch.nn.Module):
             torch.linspace(X.min(), X.max(), n_breaks, dtype=torch.float32)[None, :]
         )
 
+    def breakpoints(self) -> torch.Tensor:
+        """Get unscaled breakpoints"""
+        breakpoints = self.state_dict().get("breaks")
+        if self.scale:
+            return self.scaler.inverse_transform(breakpoints)
+        return breakpoints
+
     def forward(self, X: torch.Tensor) -> torch.Tensor:
         """Torch.nn forward."""
         if self.scale:
